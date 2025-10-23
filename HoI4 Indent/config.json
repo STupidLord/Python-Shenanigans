@@ -1,0 +1,10 @@
+{
+    "comment": "Origin and output have to have two backslashes, having only one backslash will throw an error",
+    "origin": "\\original\\",
+    "output": "\\mod\\",
+    "log-comment": "1 for on, anything else for off; log files can be upwards of 14-20mb",
+    "logging": "0",
+    "log": "\\logs\\",
+    "cull-comment": "Cull after how many logs",
+    "cull": "5"
+}
