@@ -9,3 +9,6 @@ Looking through these files may give the impression that I am schizophrenic... I
 HOWEVER, I personally attribute the completely absurdity of these files to me having random moments where I start making python code every few months.
 
 Rule of thumb, expect every py file to not work because it's made by me.
+
+# Spelling
+I can't spell, especially since I like to code at midnight when half asleep.
