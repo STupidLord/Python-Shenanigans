@@ -4,6 +4,8 @@ import re
 import hashlib
 import argparse
 
+__all__ = ["MapItem", "copy_map_files", "get_list_of_maps", "read_list_of_maps"]
+
 # MapItem object simply for the fact that I want to make my code a bit
 # better and have an overall eaiser workflow compared to what I was
 # doing before. Turns out that using a list of dictionsaries is a tad
@@ -75,11 +77,6 @@ def copy_map_files(
     src_dir = _prepare_dir_as_path(src_dir)
     dst_dir = _prepare_dir_as_path(dst_dir)
 
-    # Also make motd_dir in the case it is provided.
-    if motd != r"":
-        # Doesn't work yet, still debating how to integrate this :p
-        motd_dir = Path(motd)
-
     for item in list_of_maps:
         dst_path = dst_dir.joinpath(item.name)
         _copy_and_log_map(item, dst_path, file_status)
@@ -87,8 +84,43 @@ def copy_map_files(
         if item.nav_path is not None:
             dst_nav_path = dst_dir.joinpath(item.nav_name)
             _copy_and_log_nav(item, dst_nav_path, file_status)
+    
+    if motd != r"":
+        _update_mapcycle_and_motd(list_of_maps, motd)
 
     return list_of_maps
+
+# Perhaps doing both motds and mapcycle in the same function is...
+# excessive. However, I am far to lazy to split it further at this time.
+# All that matters to me is that it works for me. Will add docstring to
+# this and update the docstring of copy_map_files() later.
+def _update_mapcycle_and_motd(list_of_maps: list[MapItem], motd_dir):
+    motd_dir = _prepare_dir_as_path(motd_dir)
+    mapcycle_path = motd_dir.joinpath("mapcycle.txt")
+    motd_path = motd_dir.joinpath("motd.txt")
+    motd_base_path = motd_dir.joinpath("motd_base.txt")
+    motd_text_path = motd_dir.joinpath("motd_text.txt")
+    motd_text_base_path = motd_dir.joinpath("motd_text_base.txt")
+
+    map_names = [item.stem for item in list_of_maps]
+    motd_map_list = "\n - " + "\n - ".join(map_names)
+
+    mapcycle = open(mapcycle_path, "w")
+    for item in map_names:
+        mapcycle.write(item + "\n")
+    mapcycle.close()
+
+    with open(motd_base_path, "r") as file:
+        motd_content = file.read()
+    motd_content = re.sub(r"---MAPSPLACEMENTAREA---", motd_map_list, motd_content)
+    with open(motd_path, "w") as file:
+        file.write(motd_content)
+
+    with open(motd_text_base_path, "r") as file:
+        motd_text_content = file.read()
+    motd_text_content = re.sub(r"---MAPSPLACEMENTAREA---", motd_map_list, motd_text_content)
+    with open(motd_text_path, "w") as file:
+        file.write(motd_text_content)
 
 # Both _copy_and_log_map() and _copy_and_log_nav() serve the same
 # purpose, but they do so for their respective file types: .bsp and
@@ -97,14 +129,14 @@ def copy_map_files(
 # directly access attributes if I know which file I am working with.
 def _copy_and_log_map(item: MapItem, dst_dir: Path, file_status: bool):
     if file_status and dst_dir.exists():
-        old_hash = get_file_hash(dst_dir)
+        old_hash = _get_file_hash(dst_dir)
     elif file_status:
         item.status = "CREATED"
 
     shutil.copyfile(item.path, dst_dir)
 
     if file_status and item.status is None:
-        new_hash = get_file_hash(dst_dir)
+        new_hash = _get_file_hash(dst_dir)
         if old_hash == new_hash:
             item.status = "IDENTICAL"
         else:
@@ -112,14 +144,14 @@ def _copy_and_log_map(item: MapItem, dst_dir: Path, file_status: bool):
 
 def _copy_and_log_nav(item: MapItem, dst_dir: Path, file_status: bool):
     if file_status and dst_dir.exists():
-        old_hash = get_file_hash(dst_dir)
+        old_hash = _get_file_hash(dst_dir)
     elif file_status:
         item.nav_status = "CREATED"
 
     shutil.copyfile(item.nav_path, dst_dir)
 
     if file_status and item.nav_status is None:
-        new_hash = get_file_hash(dst_dir)
+        new_hash = _get_file_hash(dst_dir)
         if old_hash == new_hash:
             item.nav_status = "IDENTICAL"
         else:
@@ -207,7 +239,7 @@ def get_nav_mesh(src_dir, file_stem) -> tuple[Path, str]:
     return None, None # If you can't find a nav mesh... return nothing :D
 
 # File hashing, used for determining if a file was identical or updated.
-def get_file_hash(filepath):
+def _get_file_hash(filepath):
     """Return the hash of a file's content."""
     hasher = hashlib.new("sha256")
     try:
