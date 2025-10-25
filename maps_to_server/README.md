@@ -9,3 +9,10 @@ Originally I didn't push the old one because I didn't want it to see the light o
 I refuse to let a code formatter touch my code, ever. However, I know following some standards might be beneficial in the long run if I want to ever touch other codebases. To remedy my hatred of code formatters; I simply went through my code and made it loosely compliant (loosely doing heavy lifting) with some PEP 8 things.
 
 I'll be honest, I'm not a big fan of following something like PEP 8 as I'm used to being able to format my stuff however I want, but I understand the use case and respect those who follow it.
+
+## Part 2, Electric Boogaloo
+Okay... maybe I like formatting a bit more than I suggested before. I've been going through code and making smaller helper functions to reduce the amount of work a single function is doing.
+
+Reading a list of `MapItem`s? Well, before `read_list_of_maps()` would do it all, but now it simply iterates and calls `read()` on the `MapItem`.
+
+Copying a list of maps from one folder to another? `copy_map_files()` used to do that with the help of `get_list_of_maps()` alone, but now it also delegates tasks to `_prepare_dir_as_path()`, `_copy_and_log_map()`, and `_copy_and_log_nav()`.

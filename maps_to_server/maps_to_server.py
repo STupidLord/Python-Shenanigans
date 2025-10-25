@@ -21,13 +21,30 @@ class MapItem:
         self.nav_name = nav_name
         self.nav_path = nav_path
         self.nav_status = nav_status
+    
+    def read(self):
+        """Prints content of MapItem to console."""
+        output = f"{self.stem}:\n - {self.path}"
+        if self.has_status():
+            output += f" => {self.status}"
+        if self.has_nav():
+            nav_status_text = f" => {self.nav_status}" if self.has_status() else ""
+            output += f"\n - {self.nav_path}{nav_status_text}"
+        print(output)
+
+    def has_status(self):
+        return self.status is not None
+    
+    def has_nav(self):
+        return self.nav_path is not None
 
 # Move files from A to B, along with returning a coolio list of what
 # said files were and their status.
 # This ain't on the CLI yet because... lazy + it's not complete :<
 def copy_map_files(
-        src_dir, dst_dir, /, file_pattern=r".", nav_required=False,
-        file_status=False, motd="") -> list[MapItem]:
+        src_dir, dst_dir, /, file_pattern=r".",
+        nav_required=False, file_status=False, motd=""
+        ) -> list[MapItem]:
     """Copies map files from source directory to destination directory.
 
     Args:
@@ -47,7 +64,7 @@ def copy_map_files(
             to **src_dir** or **dst_dir**.
 
     Returns:
-        list[MapItem]: A list of :class:MapItems that each contain
+        list[MapItem]: A list of MapItems that each contain
             information relating to a specific `.bsp` file, including
             it's `.nav` if it has one.
     """
@@ -55,19 +72,8 @@ def copy_map_files(
     
     # Convert src_dir and dst_dir into paths
     # because it makes us angry if it isn't.
-    src_dir = Path(src_dir)
-    dst_dir = Path(dst_dir)
-    # Make sure file paths actually exist smh.
-    if not src_dir.exists():
-        raise FileNotFoundError(
-            f"Source directory: '{src_dir} is not "
-            f"a valid file path, path must fully exist."
-        )
-    if not dst_dir.exists():
-        raise FileNotFoundError(
-            f"Destination directory: '{dst_dir}' is not "
-            f"a valid file path, path must fully exist."
-            )
+    src_dir = _prepare_dir_as_path(src_dir)
+    dst_dir = _prepare_dir_as_path(dst_dir)
 
     # Also make motd_dir in the case it is provided.
     if motd != r"":
@@ -76,45 +82,55 @@ def copy_map_files(
 
     for item in list_of_maps:
         dst_path = dst_dir.joinpath(item.name)
-        if file_status and dst_path.exists():
-            map_file_hash_old = get_file_hash(dst_path)
-        elif file_status:
-            item.status = "CREATED"
+        _copy_and_log_map(item, dst_path, file_status)
 
-        shutil.copyfile(item.path, dst_path)
-
-        if file_status and item.status is None:
-            map_file_hash_new = get_file_hash(dst_path)
-            if map_file_hash_old == map_file_hash_new:
-                item.status = "IDENTICAL"
-            else:
-                item.status = "UPDATED"
-
-        # Stop throwing errors pls
         if item.nav_path is not None:
             dst_nav_path = dst_dir.joinpath(item.nav_name)
-            if file_status and dst_nav_path.exists():
-                nav_file_hash_old = get_file_hash(dst_nav_path)
-            elif file_status:
-                item.nav_status = "CREATED"
-
-            shutil.copyfile(item.nav_path, dst_nav_path)
-
-            if file_status and item.nav_status is None:
-                nav_file_hash_new = get_file_hash(dst_nav_path)
-                if nav_file_hash_old == nav_file_hash_new:
-                    item.nav_status = "IDENTICAL"
-                else:
-                    item.nav_status = "UPDATED"
+            _copy_and_log_nav(item, dst_nav_path, file_status)
 
     return list_of_maps
+
+# Both _copy_and_log_map() and _copy_and_log_nav() serve the same
+# purpose, but they do so for their respective file types: .bsp and
+# .nav. Technically it could be done with one function, yes, but it is
+# cleaner, in my opinion, to have them separate like this as I can
+# directly access attributes if I know which file I am working with.
+def _copy_and_log_map(item: MapItem, dst_dir: Path, file_status: bool):
+    if file_status and dst_dir.exists():
+        old_hash = get_file_hash(dst_dir)
+    elif file_status:
+        item.status = "CREATED"
+
+    shutil.copyfile(item.path, dst_dir)
+
+    if file_status and item.status is None:
+        new_hash = get_file_hash(dst_dir)
+        if old_hash == new_hash:
+            item.status = "IDENTICAL"
+        else:
+            item.status = "UPDATED"
+
+def _copy_and_log_nav(item: MapItem, dst_dir: Path, file_status: bool):
+    if file_status and dst_dir.exists():
+        old_hash = get_file_hash(dst_dir)
+    elif file_status:
+        item.nav_status = "CREATED"
+
+    shutil.copyfile(item.nav_path, dst_dir)
+
+    if file_status and item.nav_status is None:
+        new_hash = get_file_hash(dst_dir)
+        if old_hash == new_hash:
+            item.nav_status = "IDENTICAL"
+        else:
+            item.nav_status = "UPDATED"
 
 # Generate a list of MapItem objects and their properties.
     # Docstring to be reformatted similar to the
     # copy_map_files() one soon.
 def get_list_of_maps(
         src_dir, /, file_pattern=r".", nav_required=False
-    ) -> list[MapItem]:
+        ) -> list[MapItem]:
     """
     Return a list of 'MapItem' objects containing info about the maps
     (and their properties) located in the source directory.
@@ -135,38 +151,47 @@ def get_list_of_maps(
     """
     list_of_maps = [] # Create the empty list.
 
-    src_dir = Path(src_dir)
+    src_dir = _prepare_dir_as_path(src_dir)
 
     # For file in src_dir that is a .bsp.
     for file in src_dir.glob(r"*.bsp"):
         file_path = src_dir.joinpath(file.name)
         nav_mesh, nav_name = get_nav_mesh(src_dir, file.stem)
         if re.match(file_pattern, file.stem) and nav_mesh is not None:
-            # Check that the file matches the pattern and has an
-            # accompanying .nav.
             list_of_maps.append(
                 MapItem(file.stem, file.name, file_path, nav_name, nav_mesh)
-            )
-        elif re.match(file_pattern, file.stem) and not nav_required: 
-            # If file doesn't have an accompantying .nav, add only the
-            # map file itself. But don't add files if nav is required!
-            list_of_maps.append(MapItem(file.stem, file.name, file_path))
+                )
+        elif re.match(file_pattern, file.stem) and not nav_required:
+            list_of_maps.append(
+                MapItem(file.stem, file.name, file_path)
+                )
 
     return list_of_maps # Return the list.
 
-def read_list_of_maps(list_of_maps):
-    for item in list_of_maps:
-        if item.status is not None and item.nav_path is not None:
-            print(
-                f"{item.stem}:\n - {item.path} => ({item.status})"
-                f"\n - {item.nav_path} => ({item.nav_status})"
+def _prepare_dir_as_path(dir_path):
+    """Converts a string into a pathlib Path() object.
+
+    Args:
+        dir_path (str): Desired str path to convert into a Path().
+
+    Raises:
+        FileNotFoundError: Raised if the parsed Path doesn't exist.
+
+    Returns:
+        Path: pathlib Path() object.
+    """
+    dir_path = Path(dir_path)
+    if not dir_path.exists():
+        raise FileNotFoundError(
+            f"Directory: '{dir_path}' is not a valid"
+            f"directory path, path must fully exist."
             )
-        elif item.status is not None:
-            print(f"{item.stem}:\n - {item.path} ({item.status})")
-        elif item.nav_path is not None:
-            print(f"{item.stem}:\n - {item.path}\n - {item.nav_path}")
-        else:
-            print(f"{item.stem}:\n - {item.path}")
+    return dir_path
+
+def read_list_of_maps(list_of_maps: list[MapItem]):
+    """Reads a list of MapItems."""
+    for item in list_of_maps:
+        item.read()
 
 # Find nav mesh for specific map.
 def get_nav_mesh(src_dir, file_stem) -> tuple[Path, str]:
@@ -205,6 +230,45 @@ def main():
     subparsers = parser.add_subparsers(dest="function", required=True)
     
     # Individual parsers.
+    ## copy_map_files()
+    copy_map_files_parser = subparsers.add_parser(
+        "copy_map_files",
+        help="Copies map files from a source directory and pastes them into a destination.",
+        )
+    copy_map_files_parser.add_argument(
+        "-s",
+        "--source",
+        type=str,
+        required=True,
+        help="Source directory to copy map files from.",
+        )
+    copy_map_files_parser.add_argument(
+        "-d",
+        "--dir",
+        type=str,
+        required=True,
+        help="Directory to paste map files into.",
+        )
+    copy_map_files_parser.add_argument(
+        "-p",
+        "--pattern",
+        type=str,
+        required=False,
+        default=r".",
+        help="Regex pattern to match file name to.",
+        )
+    copy_map_files_parser.add_argument(
+        "-n",
+        "--nav-required",
+        action="store_true",
+        help="If nav mesh should be required. Defaults to false.",
+        )
+    copy_map_files_parser.add_argument(
+        "-f",
+        "--file-status",
+        action="store_true",
+        help="If True, logs the status of copied maps. (CREATED, UPDATED, IDENTICAL)",
+        )
     ## get_list_of_maps()
     list_of_maps_parser = subparsers.add_parser(
         "get_list_of_maps",
@@ -223,14 +287,12 @@ def main():
         type=str,
         required=False,
         default=r".",
-        help="Regex pattern to serach for.",
+        help="Regex pattern to match file name to.",
         )
     list_of_maps_parser.add_argument(
-        "-r",
+        "-n",
         "--nav-required",
-        type=bool,
-        required=False,
-        default=False,
+        action="store_true",
         help="If nav mesh should be required. Defaults to false.",
         )
     ## get_nav_mesh()
@@ -257,9 +319,11 @@ def main():
     args = parser.parse_args()
     
     # Handle commands.
-    if args.function == "get_list_of_maps":
+    if args.function == "copy_map_files":
+        list_of_maps = copy_map_files(args.source, args.dir, args.pattern, args.nav_required, args.file_status)
+        read_list_of_maps(list_of_maps)
+    elif args.function == "get_list_of_maps":
         list_of_maps = get_list_of_maps(args.dir, args.pattern, args.nav_required)
-
         read_list_of_maps(list_of_maps)
     elif args.function == "get_nav_mesh":
         nav_mesh, nav_name = get_nav_mesh(args.dir, args.file)
